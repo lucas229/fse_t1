@@ -4,9 +4,17 @@
 #define ENROLLMENT_LENGTH 4
 
 unsigned char enrollment[ENROLLMENT_LENGTH];
+double kp, ki, kd;
+float referenceTemperature;
 
-void init();
-void getEnrollment();
+void initMenu();
+void getEnrollmentMenu();
 void mainMenu();
+void oven();
+void referenceTemperatureMenu();
+void externalPotentiometerMenu();
+void keyboardInputMenu();
+void temperatureCurveMenu();
+void parametersMenu();
 
 #endif
