@@ -1,7 +1,7 @@
 #ifndef MAININTERFACE_H
 #define MAININTERFACE_H
 
-#define ENROLLMENT_LENGTH 4
+#include "modbus.h"
 
 unsigned char enrollment[ENROLLMENT_LENGTH];
 double kp, ki, kd;
@@ -10,7 +10,7 @@ float referenceTemperature;
 void initMenu();
 void getEnrollmentMenu();
 void mainMenu();
-void oven();
+void startOven();
 void referenceTemperatureMenu();
 void externalPotentiometerMenu();
 void keyboardInputMenu();

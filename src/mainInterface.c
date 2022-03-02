@@ -31,7 +31,7 @@ void mainMenu() {
         scanf("%d", &choice);
         system("clear");
         if(choice == 1) {
-            oven();
+            startOven();
         } else if(choice == 2) {
             referenceTemperatureMenu();
         } else if(choice == 3) {
@@ -40,6 +40,9 @@ void mainMenu() {
             break;
         }
     }
+}
+
+void startOven() {
 }
 
 void referenceTemperatureMenu() {
@@ -59,13 +62,15 @@ void referenceTemperatureMenu() {
     }
 }
 
+void externalPotentiometerMenu() {
+    readModbus(REF_TEMP, enrollment, &referenceTemperature);
+    printf("Temperatura de referência: %f\n\n", referenceTemperature);
+}
+
 void keyboardInputMenu() {
     printf("Temperatura de referência: ");
     scanf("%f", &referenceTemperature);
     system("clear");
-}
-
-void externalPotentiometerMenu() {
 }
 
 void temperatureCurveMenu() {
@@ -79,10 +84,4 @@ void parametersMenu() {
     printf("Kd: ");
     scanf("%lf", &kd);
     system("clear");
-}
-
-void oven() {
-    while(1) {
-        sleep(1);
-    }
 }
