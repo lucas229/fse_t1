@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "mainInterface.h"
+#include "pid.h"
 
 void initMenu() {
     system("clear");
@@ -24,7 +25,7 @@ void getEnrollmentMenu() {
 void mainMenu() {
     while(1) {
         printf("1 - Acionar forno\n");
-        printf("2 - Atualizar temperatura de referência\n");
+        printf("2 - Alterar temperatura de referência\n");
         printf("3 - Alterar parâmetros\n");
         printf("0 - Finalizar\n");
         int choice;
@@ -43,37 +44,36 @@ void mainMenu() {
 }
 
 void startOven() {
-}
-
-void referenceTemperatureMenu() {
-    printf("1 - Potenciômetro externo\n");
-    printf("2 - Entrada de teclado\n");
-    printf("3 - Curva de temperatura\n");
-    printf("0 - Retornar\n");
-    int choice;
-    scanf("%d", &choice);
-    system("clear");
-    if(choice == 1) {
-        externalPotentiometerMenu();
-    } else if(choice == 2) {
-        keyboardInputMenu();
-    } else if(choice == 3) {
-        temperatureCurveMenu();
+    int status;
+    while(1) {
+        if(readModbus(USER_CMD, enrollment, &status) != -1 && status == 1) {
+            printf("Ligando\n");
+            unsigned char s = 1;
+            writeModbus(SYS_STATUS, enrollment, &s);
+            float internalTemperature;
+            readModbus(INT_TEMP, enrollment, &internalTemperature);
+            printf("Temperatura interna: %f\n", internalTemperature);
+            printf("Sinal de controle: %lf\n", pid_controle(internalTemperature));
+            while(1) {
+                if(readModbus(USER_CMD, enrollment, &status) != -1 && status == 2) {
+                    printf("Desligando\n");
+                    s = 0;
+                    writeModbus(SYS_STATUS, enrollment, &s);
+                }
+                printf("-------------------Estado: %d\n", status);
+                sleep(1);
+            }
+        } else {
+            printf("Falha\n");
+        }
+        sleep(1);
     }
 }
 
-void externalPotentiometerMenu() {
-    readModbus(REF_TEMP, enrollment, &referenceTemperature);
-    printf("Temperatura de referência: %f\n\n", referenceTemperature);
-}
-
-void keyboardInputMenu() {
+void referenceTemperatureMenu() {
     printf("Temperatura de referência: ");
     scanf("%f", &referenceTemperature);
     system("clear");
-}
-
-void temperatureCurveMenu() {
 }
 
 void parametersMenu() {
@@ -84,4 +84,5 @@ void parametersMenu() {
     printf("Kd: ");
     scanf("%lf", &kd);
     system("clear");
+    pid_configura_constantes(kp, ki, kd);
 }

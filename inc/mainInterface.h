@@ -12,9 +12,6 @@ void getEnrollmentMenu();
 void mainMenu();
 void startOven();
 void referenceTemperatureMenu();
-void externalPotentiometerMenu();
-void keyboardInputMenu();
-void temperatureCurveMenu();
 void parametersMenu();
 
 #endif

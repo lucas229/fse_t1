@@ -4,8 +4,8 @@
 #define INT_TEMP 0xC1
 #define REF_TEMP 0xC2
 #define USER_CMD 0xC3
-#define INTEGER_SND 0xB1
-#define FLOAT_SND 0xB2
+#define SYS_STATUS 0xD3
+#define CTRL_MODE 0xD4
 #define STRING_SND 0xB3
 #define ENROLLMENT_LENGTH 4
 
