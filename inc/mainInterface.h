@@ -3,15 +3,13 @@
 
 #include "modbus.h"
 
-unsigned char enrollment[ENROLLMENT_LENGTH];
-double kp, ki, kd;
-float referenceTemperature;
-
 void initMenu();
-void getEnrollmentMenu();
+void enrollmentMenu();
 void mainMenu();
+void waitOven();
 void startOven();
 void referenceTemperatureMenu();
 void parametersMenu();
+void showValues();
 
 #endif

@@ -24,13 +24,12 @@ int createPackage(unsigned char functionCode, unsigned char dataCode, unsigned c
 void writeModbus(unsigned char dataCode, unsigned char *enrollment, void *data) {
     unsigned char tx_buffer[261];
     int size;
-    if(dataCode == SYS_STATUS || dataCode == CTRL_MODE) {
+    if(dataCode == CTRL_SIGNAL) {
+        size = createPackage(0x16, dataCode, enrollment, data, sizeof(int), tx_buffer);
+    } else if(dataCode == REF_SIGNAL) {
+        size = createPackage(0x16, dataCode, enrollment, data, sizeof(float), tx_buffer);
+    } else if(dataCode == SYS_STATUS || dataCode == CTRL_MODE) {
         size = createPackage(0x16, dataCode, enrollment, data, sizeof(unsigned char), tx_buffer);
-    } else if(dataCode == STRING_SND) {
-        int length = strlen(data) + 1;
-        unsigned char string[256] = {length};
-        memcpy(&string[1], data, length);
-        size = createPackage(0x16, dataCode, enrollment, string, length + 1, tx_buffer);
     }
     initializeUart("/dev/serial0");
     writeUart(tx_buffer, size);
