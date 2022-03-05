@@ -71,6 +71,7 @@ void waitOven() {
             }
 
             initOven();
+            system("clear");
             mode = POTENTIOMETER_MODE;
             referenceTemperature = -1;
 
@@ -91,6 +92,8 @@ void waitOven() {
 
 void initOven() {
     initGpio();
+    int time = 0, target = 0;
+    FILE *file = NULL;
     while(1) {
         float internalTemperature;
         readModbus(INT_TEMP, enrollment, &internalTemperature);
@@ -98,7 +101,16 @@ void initOven() {
         if(mode == POTENTIOMETER_MODE) {
             readModbus(REF_TEMP, enrollment, &referenceTemperature);
         } else if(mode == CURVE_MODE) {
-
+            if(file == NULL) {
+                file = fopen("Data/curva_reflow.csv", "r");
+                fscanf(file, "%*[^\n]");
+                fscanf(file, "%d,", &target);
+            }
+            if(time == target) {
+                fscanf(file, "%f", &referenceTemperature);
+                fscanf(file, "%d,", &target);
+            }
+            time++;
         }
 
         int signal = calculateSignal(internalTemperature);
@@ -109,7 +121,8 @@ void initOven() {
 
         printf("Temperatura interna: %.2f\n", internalTemperature);
         printf("Temperatura de referência: %.2f\n", referenceTemperature);
-        printf("Sinal de controle: %d\n\n", signal);
+        printf("Sinal de controle: %d\n", signal);
+        printf("Time: %d\n\n", time);
 
         writeModbus(CTRL_SIGNAL, enrollment, &signal);
         writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
@@ -119,12 +132,23 @@ void initOven() {
         } else {
             signal = -signal;
             softPwmWrite(FAN_PIN, signal);
+            softPwmWrite(RESISTOR_PIN, 0);
         }
 
-        if(readCommand() == 0x02) {
+        int status = readCommand();
+        if(status == 0x02) {
             break;
+        } else if(status == 0x03) {
+            time = 0;
+            if(file != NULL) {
+                fclose(file);
+                file = NULL;
+            }
         }
         sleep(1);
+    }
+    if(file != NULL) {
+        fclose(file);
     }
 }
 
