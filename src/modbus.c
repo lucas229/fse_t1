@@ -62,7 +62,7 @@ int readModbus(unsigned char dataCode, unsigned char *enrollment, void *data) {
 int receive(unsigned char *tx_buffer, unsigned char *rx_buffer, int size) {
     initializeUart("/dev/serial0");
     writeUart(tx_buffer, size);
-    sleep(1);
+    usleep(500000);
     int rx_length = readUart(rx_buffer);
     closeUart();
     return rx_length;

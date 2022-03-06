@@ -14,6 +14,8 @@ void waitOven();
 void initOven();
 void initGpio();
 int calculateSignal(int internalTemperature);
+int getLogFile();
+void logData(int file, float internalTemperature, int resistorSignal, int fanSignal);
 int readCommand();
 void referenceTemperatureMenu();
 void parametersMenu();

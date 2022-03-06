@@ -3,6 +3,10 @@
 #include <unistd.h>
 #include <wiringPi.h>
 #include <softPwm.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
+#include <time.h>
 
 #include "mainInterface.h"
 #include "pid.h"
@@ -92,7 +96,7 @@ void waitOven() {
 
 void initOven() {
     initGpio();
-    int time = 0, target = 0;
+    int time = 0, target = 0, log = getLogFile(), resistorSignal = 0, fanSignal = 0;
     FILE *file = NULL;
     while(1) {
         float internalTemperature;
@@ -128,12 +132,17 @@ void initOven() {
         writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
 
         if(signal >= 0) {
+            resistorSignal = signal;
             softPwmWrite(RESISTOR_PIN, signal);
         } else {
             signal = -signal;
+            fanSignal = signal;
+            resistorSignal = 0;
             softPwmWrite(FAN_PIN, signal);
             softPwmWrite(RESISTOR_PIN, 0);
         }
+
+        logData(log, internalTemperature, resistorSignal, fanSignal);
 
         int status = readCommand();
         if(status == 0x02) {
@@ -150,6 +159,7 @@ void initOven() {
     if(file != NULL) {
         fclose(file);
     }
+    close(log);
 }
 
 void initGpio() {
@@ -164,6 +174,30 @@ int calculateSignal(int internalTemperature) {
     pid_atualiza_referencia(referenceTemperature);
     pid_configura_constantes(kp, ki, kd);
     return pid_controle(internalTemperature);
+}
+
+int getLogFile() {
+    struct stat info;
+    if(stat("Data", &info) == -1) {
+        mkdir("Data", S_IRWXU);
+    }
+    int file = open("Data/log.csv", O_CREAT|O_WRONLY, S_IRWXU);
+    char header[] = "Date (YYYY-MM-DD),Time (HH:MM:SS),Internal temperature,Reference temperature,Resistor,Fan\n";
+    write(file, header, strlen(header));
+    return file;
+}
+
+void logData(int file, float internalTemperature, int resistorSignal, int fanSignal) {
+    time_t now;
+    time(&now);
+    struct tm *local = localtime(&now);
+    char data[256];
+    strftime(data, 256, "%Y-%m-%d,", local);
+    write(file, data, strlen(data));
+    strftime(data, 256, "%H:%M:%S,", local);
+    write(file, data, strlen(data));
+    sprintf(data, "%f,%lf,%d,%d\n", internalTemperature, referenceTemperature, resistorSignal, fanSignal);
+    write(file, data, strlen(data));
 }
 
 int readCommand() {
