@@ -22,5 +22,6 @@ void parametersMenu();
 void showValues();
 void lcdOff();
 void updateDisplay(float internalTemperature);
+void closeConnections();
 
 #endif

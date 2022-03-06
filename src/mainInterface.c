@@ -278,3 +278,11 @@ void updateDisplay(float internalTemperature) {
     sprintf(data, "TI:%.1f TR:%.1lf", internalTemperature, referenceTemperature);
     typeln(data);
 }
+
+void closeConnections() {
+    softPwmStop(RESISTOR_PIN);
+    softPwmStop(FAN_PIN);
+    unsigned char status = 0;
+    writeModbus(SYS_STATUS, enrollment, &status);
+    ClrLcd();
+}
