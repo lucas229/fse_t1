@@ -12,6 +12,7 @@
 #include "pid.h"
 #include "modbus.h"
 #include "i2clcd.h"
+#include "linux_userspace.h"
 
 static unsigned char enrollment[ENROLLMENT_LENGTH], mode = POTENTIOMETER_MODE;
 static float referenceTemperature = -1;
@@ -21,7 +22,7 @@ void initMenu() {
     system("clear");
     enrollmentMenu();
     lcd_connect();
-    lcdOff();
+    init_sensor();
     mainMenu();
 }
 
@@ -63,7 +64,7 @@ void mainMenu() {
 void waitOven() {
     unsigned char reply = 0;
     writeModbus(SYS_STATUS, enrollment, &reply);
-
+    lcdOff();
     while(1) {
         int status = 0x02;
         if(readModbus(USER_CMD, enrollment, &status) != -1 && status == 0x01) {
@@ -78,7 +79,6 @@ void waitOven() {
             }
 
             initOven();
-            lcdOff();
             system("clear");
             mode = POTENTIOMETER_MODE;
             referenceTemperature = -1;
@@ -89,8 +89,10 @@ void waitOven() {
             scanf("%d", &choice);
             system("clear");
             if(choice == 2) {
+                ClrLcd();
                 break;
             }
+            lcdOff();
         }
 
         printf("Aguardando acionamento...\n\n");
@@ -127,7 +129,9 @@ void initOven() {
             signal = -40;
         }
 
+        struct bme280_data data = get_sensor_data();
         printf("Temperatura interna: %.2f\n", internalTemperature);
+        printf("Temperatura externa: %.2lf\n", data.temperature);
         printf("Temperatura de referência: %.2f\n", referenceTemperature);
         printf("Sinal de controle: %d\n", signal);
         printf("Time: %d\n\n", time);
@@ -146,9 +150,9 @@ void initOven() {
             softPwmWrite(RESISTOR_PIN, 0);
         }
 
-        updateDisplay(internalTemperature);
+        updateDisplay(internalTemperature, data.temperature);
 
-        logData(log, internalTemperature, resistorSignal, fanSignal);
+        logData(log, internalTemperature, data.temperature, resistorSignal, fanSignal);
 
         int status = readCommand();
         if(status == 0x02) {
@@ -188,12 +192,12 @@ int getLogFile() {
         mkdir("Data", S_IRWXU);
     }
     int file = open("Data/log.csv", O_CREAT|O_WRONLY, S_IRWXU);
-    char header[] = "Date (YYYY-MM-DD),Time (HH:MM:SS),Internal temperature,Reference temperature,Resistor,Fan\n";
+    char header[] = "Date (YYYY-MM-DD),Time (HH:MM:SS),Internal temperature,External temperature,Reference temperature,Resistor,Fan\n";
     write(file, header, strlen(header));
     return file;
 }
 
-void logData(int file, float internalTemperature, int resistorSignal, int fanSignal) {
+void logData(int file, float internalTemperature, double externalTemperature, int resistorSignal, int fanSignal) {
     time_t now;
     time(&now);
     struct tm *local = localtime(&now);
@@ -202,7 +206,7 @@ void logData(int file, float internalTemperature, int resistorSignal, int fanSig
     write(file, data, strlen(data));
     strftime(data, 256, "%H:%M:%S,", local);
     write(file, data, strlen(data));
-    sprintf(data, "%f,%lf,%d,%d\n", internalTemperature, referenceTemperature, resistorSignal, fanSignal);
+    sprintf(data, "%f,%lf,%f,%d,%d\n", internalTemperature, externalTemperature, referenceTemperature, resistorSignal, fanSignal);
     write(file, data, strlen(data));
 }
 
@@ -227,8 +231,15 @@ int readCommand() {
 void referenceTemperatureMenu() {
     printf("Insira -1 para desativar o modo de controle por terminal.\n\n");
     printf("Temperatura de referência: ");
-    scanf("%f", &referenceTemperature);
+    float temperature;
+    scanf("%f", &temperature);
     system("clear");
+    struct bme280_data data = get_sensor_data();
+    if(temperature < data.temperature && temperature != -1) {
+        printf("A temperatura de referência não pode ser menor do que a temperatura ambiente (%.2lf).\n\n", data.temperature);
+        return;
+    }
+    referenceTemperature = temperature;
     if(referenceTemperature == -1) {
         mode = POTENTIOMETER_MODE;
     } else {
@@ -264,18 +275,18 @@ void lcdOff() {
     typeln(data);
 }
 
-void updateDisplay(float internalTemperature) {
+void updateDisplay(float internalTemperature, double externalTemperature) {
     ClrLcd();
     lcdLoc(LINE1);
     char data[256];
     if(mode == TERMINAL_MODE) {
-        sprintf(data, "Modo: Terminal");
+        sprintf(data, "TERM TI:%.1f", internalTemperature);
     } else {
-        sprintf(data, "Modo: UART");
+        sprintf(data, "UART TI:%.1f", internalTemperature);
     }
     typeln(data);
     lcdLoc(LINE2);
-    sprintf(data, "TI:%.1f TR:%.1lf", internalTemperature, referenceTemperature);
+    sprintf(data, "TE:%.1lf TR:%.1f", externalTemperature, referenceTemperature);
     typeln(data);
 }
 

@@ -15,13 +15,13 @@ void initOven();
 void initGpio();
 int calculateSignal(int internalTemperature);
 int getLogFile();
-void logData(int file, float internalTemperature, int resistorSignal, int fanSignal);
+void logData(int file, float internalTemperature, double externalTemperature, int resistorSignal, int fanSignal);
 int readCommand();
 void referenceTemperatureMenu();
 void parametersMenu();
 void showValues();
 void lcdOff();
-void updateDisplay(float internalTemperature);
+void updateDisplay(float internalTemperature, double externalTemperature);
 void closeConnections();
 
 #endif
