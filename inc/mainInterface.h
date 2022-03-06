@@ -20,5 +20,7 @@ int readCommand();
 void referenceTemperatureMenu();
 void parametersMenu();
 void showValues();
+void lcdOff();
+void updateDisplay(float internalTemperature);
 
 #endif
