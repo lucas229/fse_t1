@@ -67,3 +67,7 @@ int receive(unsigned char *tx_buffer, unsigned char *rx_buffer, int size) {
     closeUart();
     return rx_length;
 }
+
+void closeModbus() {
+    closeUart();
+}

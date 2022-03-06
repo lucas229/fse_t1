@@ -8,20 +8,23 @@
 #define TERMINAL_MODE 2
 
 void initMenu();
+void initDevices();
 void enrollmentMenu();
 void mainMenu();
 void waitOven();
 void initOven();
 void initGpio();
-int calculateSignal(int internalTemperature);
+int calculateSignal(float internalTemperature);
 int getLogFile();
-void logData(int file, float internalTemperature, double externalTemperature, int resistorSignal, int fanSignal);
+void logData(int file, float internalTemperature, double externalTemperature, int signal);
 int readCommand();
 void referenceTemperatureMenu();
 void parametersMenu();
 void showValues();
-void lcdOff();
+void displayOff();
 void updateDisplay(float internalTemperature, double externalTemperature);
 void closeConnections();
+void closeAll();
+void showError();
 
 #endif

@@ -52,6 +52,8 @@ int readUart(unsigned char *rx_buffer) {
 }
 
 void closeUart() {
-    close(uart0_filestream);
-    uart0_filestream = -1;
+    if(uart0_filestream != -1) {
+        close(uart0_filestream);
+        uart0_filestream = -1;
+    }
 }

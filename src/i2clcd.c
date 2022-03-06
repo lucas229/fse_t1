@@ -106,3 +106,7 @@ void lcd_connect() {
   fd = wiringPiI2CSetup(I2C_ADDR);
   lcd_init();
 }
+
+void lcd_close() {
+  close(fd);
+}

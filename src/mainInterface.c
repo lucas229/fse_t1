@@ -12,7 +12,7 @@
 #include "pid.h"
 #include "modbus.h"
 #include "i2clcd.h"
-#include "linux_userspace.h"
+#include "bme280Controller.h"
 
 static unsigned char enrollment[ENROLLMENT_LENGTH], mode = POTENTIOMETER_MODE;
 static float referenceTemperature = -1;
@@ -20,10 +20,15 @@ static double kp = 20, ki = 0.1, kd = 100;
 
 void initMenu() {
     system("clear");
+    initDevices();
     enrollmentMenu();
+    mainMenu();
+}
+
+void initDevices() {
+    initGpio();
     lcd_connect();
     init_sensor();
-    mainMenu();
 }
 
 void enrollmentMenu() {
@@ -39,10 +44,10 @@ void enrollmentMenu() {
 
 void mainMenu() {
     while(1) {
-        printf("1 - Aguardar forno\n");
+        printf("1 - Aguardar acionamento do forno\n");
         printf("2 - Alterar temperatura de referência\n");
-        printf("3 - Alterar parâmetros\n");
-        printf("4 - Visualizar valores\n");
+        printf("3 - Alterar parâmetros do PID\n");
+        printf("4 - Mostrar valores atuais\n");
         printf("0 - Finalizar\n");
         int choice;
         scanf("%d", &choice);
@@ -56,6 +61,7 @@ void mainMenu() {
         } else if(choice == 4) {
             showValues();
         } else {
+            closeConnections();
             break;
         }
     }
@@ -64,7 +70,7 @@ void mainMenu() {
 void waitOven() {
     unsigned char reply = 0;
     writeModbus(SYS_STATUS, enrollment, &reply);
-    lcdOff();
+    displayOff();
     while(1) {
         int status = 0x02;
         if(readModbus(USER_CMD, enrollment, &status) != -1 && status == 0x01) {
@@ -80,8 +86,9 @@ void waitOven() {
 
             initOven();
             system("clear");
-            mode = POTENTIOMETER_MODE;
-            referenceTemperature = -1;
+            if(mode != TERMINAL_MODE) {
+                referenceTemperature = -1;
+            }
 
             printf("1 - Aguardar forno\n2 - Menu inicial\n\n");
             printf("Forno desligado. Deseja aguardar o acionamento do forno ou retornar ao menu inicial?\n");
@@ -92,7 +99,7 @@ void waitOven() {
                 ClrLcd();
                 break;
             }
-            lcdOff();
+            displayOff();
         }
 
         printf("Aguardando acionamento...\n\n");
@@ -102,14 +109,20 @@ void waitOven() {
 
 void initOven() {
     initGpio();
-    int time = 0, target = 0, log = getLogFile(), resistorSignal = 0, fanSignal = 0;
+    int time = 0, target = 0, log = getLogFile();
     FILE *file = NULL;
     while(1) {
         float internalTemperature;
-        readModbus(INT_TEMP, enrollment, &internalTemperature);
+        if(readModbus(INT_TEMP, enrollment, &internalTemperature) == -1) {
+            showError();
+            break;
+        }
 
         if(mode == POTENTIOMETER_MODE) {
-            readModbus(REF_TEMP, enrollment, &referenceTemperature);
+            if(readModbus(REF_TEMP, enrollment, &referenceTemperature) == -1) {
+                showError();
+                break;
+            }
         } else if(mode == CURVE_MODE) {
             if(file == NULL) {
                 file = fopen("Data/curva_reflow.csv", "r");
@@ -137,22 +150,20 @@ void initOven() {
         printf("Time: %d\n\n", time);
 
         writeModbus(CTRL_SIGNAL, enrollment, &signal);
-        writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
+        if(mode != POTENTIOMETER_MODE) {
+            writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
+        }
 
         if(signal >= 0) {
-            resistorSignal = signal;
             softPwmWrite(RESISTOR_PIN, signal);
         } else {
             signal = -signal;
-            fanSignal = signal;
-            resistorSignal = 0;
             softPwmWrite(FAN_PIN, signal);
             softPwmWrite(RESISTOR_PIN, 0);
         }
 
         updateDisplay(internalTemperature, data.temperature);
-
-        logData(log, internalTemperature, data.temperature, resistorSignal, fanSignal);
+        logData(log, internalTemperature, data.temperature, signal);
 
         int status = readCommand();
         if(status == 0x02) {
@@ -172,6 +183,13 @@ void initOven() {
     close(log);
 }
 
+void showError() {
+    printf("Desligando o forno (Erro na conexão Modbus)...\n\n");
+    sleep(3);
+    unsigned char reply = 0;
+    writeModbus(SYS_STATUS, enrollment, &reply);
+}
+
 void initGpio() {
     wiringPiSetup();
     pinMode(RESISTOR_PIN, OUTPUT);
@@ -180,7 +198,7 @@ void initGpio() {
     softPwmCreate(FAN_PIN, 40, 100);
 }
 
-int calculateSignal(int internalTemperature) {
+int calculateSignal(float internalTemperature) {
     pid_atualiza_referencia(referenceTemperature);
     pid_configura_constantes(kp, ki, kd);
     return pid_controle(internalTemperature);
@@ -192,12 +210,12 @@ int getLogFile() {
         mkdir("Data", S_IRWXU);
     }
     int file = open("Data/log.csv", O_CREAT|O_WRONLY, S_IRWXU);
-    char header[] = "Date (YYYY-MM-DD),Time (HH:MM:SS),Internal temperature,External temperature,Reference temperature,Resistor,Fan\n";
+    char header[] = "Date(YYYY-MM-DD),Time(HH:MM:SS),Internal temperature,External temperature,Reference temperature,Signal\n";
     write(file, header, strlen(header));
     return file;
 }
 
-void logData(int file, float internalTemperature, double externalTemperature, int resistorSignal, int fanSignal) {
+void logData(int file, float internalTemperature, double externalTemperature, int signal) {
     time_t now;
     time(&now);
     struct tm *local = localtime(&now);
@@ -206,16 +224,17 @@ void logData(int file, float internalTemperature, double externalTemperature, in
     write(file, data, strlen(data));
     strftime(data, 256, "%H:%M:%S,", local);
     write(file, data, strlen(data));
-    sprintf(data, "%f,%lf,%f,%d,%d\n", internalTemperature, externalTemperature, referenceTemperature, resistorSignal, fanSignal);
+    sprintf(data, "%f,%lf,%f,%d\n", internalTemperature, externalTemperature, referenceTemperature, signal);
     write(file, data, strlen(data));
 }
 
 int readCommand() {
     int status = 0x01;
-    readModbus(USER_CMD, enrollment, &status);
+    if(readModbus(USER_CMD, enrollment, &status) == -1) {
+        showError();
+        return 0x02;
+    }
     if(status == 0x02) {
-        softPwmStop(RESISTOR_PIN);
-        softPwmStop(FAN_PIN);
         unsigned char reply = 0;
         writeModbus(SYS_STATUS, enrollment, &reply);
     } else if(status == 0x03) {
@@ -268,10 +287,10 @@ void showValues() {
     printf("Kd: %.2lf\n\n", kd);
 }
 
-void lcdOff() {
+void displayOff() {
     ClrLcd();
     lcdLoc(LINE1);
-    char data[256] = "Desligado";
+    char data[] = "Desligado";
     typeln(data);
 }
 
@@ -293,6 +312,13 @@ void updateDisplay(float internalTemperature, double externalTemperature) {
 void closeConnections() {
     softPwmStop(RESISTOR_PIN);
     softPwmStop(FAN_PIN);
+    lcd_close();
+    close_sensor();
+    closeModbus();
+}
+
+void closeAll() {
+    closeConnections();
     unsigned char status = 0;
     writeModbus(SYS_STATUS, enrollment, &status);
     ClrLcd();

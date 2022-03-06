@@ -20,6 +20,7 @@ void lcd_init(void);
 void lcd_byte(int bits, int mode);
 void lcd_toggle_enable(int bits);
 void lcd_connect();
+void lcd_close();
 
 // added by Lewis
 void typeInt(int i);

@@ -14,5 +14,6 @@ int createPackage(unsigned char functionCode, unsigned char dataCode, unsigned c
 void writeModbus(unsigned char dataCode, unsigned char *enrollment, void *data);
 int readModbus(unsigned char dataCode, unsigned char *enrollment, void *data);
 int receive(unsigned char *tx_buffer, unsigned char *rx_buffer, int size);
+void closeModbus();
 
 #endif

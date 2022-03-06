@@ -7,7 +7,7 @@
 void handleSignal(int signal) {
     system("clear");
     printf("Encerrando o programa (Ctrl+c)\n");
-    closeConnections();
+    closeAll();
     exit(0);
 }
 

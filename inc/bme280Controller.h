@@ -1,3 +1,6 @@
+#ifndef BMECONTROLLER280_H
+#define BMECONTROLLER280_H
+
 /**\
  * Copyright (c) 2020 Bosch Sensortec GmbH. All rights reserved.
  *
@@ -66,22 +69,6 @@ struct identifier
 void user_delay_us(uint32_t period, void *intf_ptr);
 
 /*!
- * @brief Function for print the temperature, humidity and pressure data.
- *
- * @param[out] comp_data    :   Structure instance of bme280_data
- *
- * @note Sensor data whose can be read
- *
- * sens_list
- * --------------
- * Pressure
- * Temperature
- * Humidity
- *
- */
-void print_sensor_data(struct bme280_data *comp_data);
-
-/*!
  *  @brief Function for reading the sensor's registers through I2C bus.
  *
  *  @param[in] reg_addr       : Register address.
@@ -115,21 +102,10 @@ int8_t user_i2c_read(uint8_t reg_addr, uint8_t *data, uint32_t len, void *intf_p
  */
 int8_t user_i2c_write(uint8_t reg_addr, const uint8_t *data, uint32_t len, void *intf_ptr);
 
-/*!
- * @brief Function reads temperature, humidity and pressure data in forced mode.
- *
- * @param[in] dev   :   Structure instance of bme280_dev.
- *
- * @return Result of API execution status
- *
- * @retval BME280_OK - Success.
- * @retval BME280_E_NULL_PTR - Error: Null pointer error
- * @retval BME280_E_COMM_FAIL - Error: Communication fail error
- * @retval BME280_E_NVM_COPY_FAILED - Error: NVM copy failed
- *
- */
-int8_t stream_sensor_data_forced_mode(struct bme280_dev *dev);
-
 void init_sensor();
 
 struct bme280_data get_sensor_data();
+
+void close_sensor();
+
+#endif
