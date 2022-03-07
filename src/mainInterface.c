@@ -121,7 +121,8 @@ void waitOven() {
 }
 
 int potentiometerMode() {
-    int log = getLogFile(), status;
+    int status;
+    FILE *log = getLogFile();
     while(1) {
         float internalTemperature;
         if(readModbus(INT_TEMP, enrollment, &internalTemperature) == -1) {
@@ -137,10 +138,7 @@ int potentiometerMode() {
         int signal = calculateSignal(internalTemperature);
 
         struct bme280_data data = get_sensor_data();
-        printf("Temperatura interna: %.2f\n", internalTemperature);
-        printf("Temperatura externa: %.2lf\n", data.temperature);
-        printf("Temperatura de referência: %.2f\n", referenceTemperature);
-        printf("Sinal de controle: %d\n\n", signal);
+        printData(internalTemperature, data.temperature, signal);
 
         updateDisplay(internalTemperature, data.temperature);
         logData(log, internalTemperature, data.temperature, signal);
@@ -149,15 +147,14 @@ int potentiometerMode() {
         if(status == 0x02 || status == 0x04) {
             break;
         }
-        usleep(500000);
     }
-    close(log);
+    fclose(log);
     return status;
 }
 
 int curveMode() {
-    int time = 0, target, log = getLogFile(), status;
-    FILE *file = fopen("Data/curva_reflow.csv", "r");
+    int time = 0, target, status;
+    FILE *file = fopen("Data/curva_reflow.csv", "r"), *log = getLogFile();
     fscanf(file, "%*[^\n]");
     fscanf(file, "%d,", &target);
     while(1) {
@@ -176,11 +173,8 @@ int curveMode() {
         writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
 
         struct bme280_data data = get_sensor_data();
-        printf("Temperatura interna: %.2f\n", internalTemperature);
-        printf("Temperatura externa: %.2lf\n", data.temperature);
-        printf("Temperatura de referência: %.2f\n", referenceTemperature);
-        printf("Sinal de controle: %d\n", signal);
-        printf("Tempo: %d\n\n", time);
+        printf("Tempo: %d\n", time);
+        printData(internalTemperature, data.temperature, signal);
 
         updateDisplay(internalTemperature, data.temperature);
         logData(log, internalTemperature, data.temperature, signal);
@@ -191,15 +185,15 @@ int curveMode() {
         }
         
         time++;
-        usleep(500000);
     }
     fclose(file);
-    close(log);
+    fclose(log);
     return status;
 }
 
 int terminalMode() {
-    int log = getLogFile(), status;
+    int status;
+    FILE *log = getLogFile();
     writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
     while(1) {
         float internalTemperature;
@@ -211,10 +205,7 @@ int terminalMode() {
         int signal = calculateSignal(internalTemperature);
 
         struct bme280_data data = get_sensor_data();
-        printf("Temperatura interna: %.2f\n", internalTemperature);
-        printf("Temperatura externa: %.2lf\n", data.temperature);
-        printf("Temperatura de referência: %.2f\n", referenceTemperature);
-        printf("Sinal de controle: %d\n\n", signal);
+        printData(internalTemperature, data.temperature, signal);
 
         updateDisplay(internalTemperature, data.temperature);
         logData(log, internalTemperature, data.temperature, signal);
@@ -226,8 +217,15 @@ int terminalMode() {
 
         usleep(500000);
     }
-    close(log);
+    fclose(log);
     return status;
+}
+
+void printData(float internalTemperature, double externalTemperature, int signal) {
+    printf("Temperatura interna: %.2f\n", internalTemperature);
+    printf("Temperatura externa: %.2lf\n", externalTemperature);
+    printf("Temperatura de referência: %.2f\n", referenceTemperature);
+    printf("Sinal de controle: %d\n\n", signal);
 }
 
 void showError() {
@@ -268,28 +266,23 @@ int calculateSignal(float internalTemperature) {
     return signal;
 }
 
-int getLogFile() {
+FILE *getLogFile() {
     struct stat info;
     if(stat("Data", &info) == -1) {
         mkdir("Data", S_IRWXU);
     }
-    int file = open("Data/log.csv", O_CREAT|O_WRONLY, S_IRWXU);
-    char header[] = "Date(YYYY-MM-DD),Time(HH:MM:SS),Internal temperature,External temperature,Reference temperature,Signal\n";
-    write(file, header, strlen(header));
+    FILE *file = fopen("Data/log.csv", "w");
+    fprintf(file, "Data,Hora,Temperatura interna,Temperatura externa,Temperatura de referência,Sinal\n");
     return file;
 }
 
-void logData(int file, float internalTemperature, double externalTemperature, int signal) {
+void logData(FILE *file, float internalTemperature, double externalTemperature, int signal) {
     time_t now;
     time(&now);
     struct tm *local = localtime(&now);
-    char data[256];
-    strftime(data, 256, "%Y-%m-%d,", local);
-    write(file, data, strlen(data));
-    strftime(data, 256, "%H:%M:%S,", local);
-    write(file, data, strlen(data));
-    sprintf(data, "%f,%lf,%f,%d\n", internalTemperature, externalTemperature, referenceTemperature, signal);
-    write(file, data, strlen(data));
+    fprintf(file, "%d/%d/%d,", local->tm_mday, local->tm_mon + 1, local->tm_year + 1900);
+    fprintf(file, "%d:%d:%d,", local->tm_hour, local->tm_min, local->tm_sec);
+    fprintf(file, "%.2f,%.2lf,%.2f,%d\n", internalTemperature, externalTemperature, referenceTemperature, signal);
 }
 
 int readCommand() {
@@ -381,8 +374,8 @@ void closeConnections() {
 }
 
 void closeAll() {
-    closeConnections();
     softPwmWrite(RESISTOR_PIN, 0);
+    closeConnections();
     unsigned char status = 0;
     writeModbus(SYS_STATUS, enrollment, &status);
     ClrLcd();

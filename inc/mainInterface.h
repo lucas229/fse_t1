@@ -17,8 +17,8 @@ int curveMode();
 int terminalMode();
 void initGpio();
 int calculateSignal(float internalTemperature);
-int getLogFile();
-void logData(int file, float internalTemperature, double externalTemperature, int signal);
+FILE *getLogFile();
+void logData(FILE *file, float internalTemperature, double externalTemperature, int signal);
 int readCommand();
 void referenceTemperatureMenu();
 void parametersMenu();
@@ -28,5 +28,6 @@ void updateDisplay(float internalTemperature, double externalTemperature);
 void closeConnections();
 void closeAll();
 void showError();
+void printData(float internalTemperature, double externalTemperature, int signal);
 
 #endif
