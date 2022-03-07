@@ -71,35 +71,48 @@ void waitOven() {
     unsigned char reply = 0;
     writeModbus(SYS_STATUS, enrollment, &reply);
     displayOff();
+
+    int flag = 0;
     while(1) {
         int status = 0x02;
-        if(readModbus(USER_CMD, enrollment, &status) != -1 && status == 0x01) {
+        if((readModbus(USER_CMD, enrollment, &status) != -1 && status == 0x01) || flag) {
             reply = 1;
             writeModbus(SYS_STATUS, enrollment, &reply);
 
-            if(mode == TERMINAL_MODE) {
+            int status;
+
+            if(mode == POTENTIOMETER_MODE) {
+                writeModbus(CTRL_MODE, enrollment, &mode);
+                status = potentiometerMode();
+                referenceTemperature = -1;
+            } else if(mode == CURVE_MODE) {
+                writeModbus(CTRL_MODE, enrollment, &mode);
+                status = curveMode();
+                referenceTemperature = -1;
+            } else if(mode == TERMINAL_MODE) {
                 reply = CURVE_MODE;
                 writeModbus(CTRL_MODE, enrollment, &reply);
+                status = terminalMode();
+            }
+
+            system("clear");
+            if(status == 0x02) {
+                printf("1 - Aguardar forno\n2 - Menu inicial\n\n");
+                printf("Forno desligado. Deseja aguardar o acionamento do forno ou retornar ao menu inicial?\n");
+                int choice;
+                scanf("%d", &choice);
+                system("clear");
+                if(choice == 1) {
+                    displayOff();
+                    flag = 0;
+                } else if(choice == 2) {
+                    ClrLcd();
+                    break;
+                }
             } else {
-                writeModbus(CTRL_MODE, enrollment, &mode);
+                flag = 1;
             }
 
-            initOven();
-            system("clear");
-            if(mode != TERMINAL_MODE) {
-                referenceTemperature = -1;
-            }
-
-            printf("1 - Aguardar forno\n2 - Menu inicial\n\n");
-            printf("Forno desligado. Deseja aguardar o acionamento do forno ou retornar ao menu inicial?\n");
-            int choice;
-            scanf("%d", &choice);
-            system("clear");
-            if(choice == 2) {
-                ClrLcd();
-                break;
-            }
-            displayOff();
         }
 
         printf("Aguardando acionamento...\n\n");
@@ -107,10 +120,8 @@ void waitOven() {
     }
 }
 
-void initOven() {
-    initGpio();
-    int time = 0, target = 0, log = getLogFile();
-    FILE *file = NULL;
+int potentiometerMode() {
+    int log = getLogFile(), status;
     while(1) {
         float internalTemperature;
         if(readModbus(INT_TEMP, enrollment, &internalTemperature) == -1) {
@@ -118,74 +129,111 @@ void initOven() {
             break;
         }
 
-        if(mode == POTENTIOMETER_MODE) {
-            if(readModbus(REF_TEMP, enrollment, &referenceTemperature) == -1) {
-                showError();
-                break;
-            }
-        } else if(mode == CURVE_MODE) {
-            if(file == NULL) {
-                file = fopen("Data/curva_reflow.csv", "r");
-                fscanf(file, "%*[^\n]");
-                fscanf(file, "%d,", &target);
-            }
-            if(time == target) {
-                fscanf(file, "%f", &referenceTemperature);
-                fscanf(file, "%d,", &target);
-            }
-            time++;
+        if(readModbus(REF_TEMP, enrollment, &referenceTemperature) == -1) {
+            showError();
+            break;
         }
 
         int signal = calculateSignal(internalTemperature);
 
-        if(signal > -40 && signal < 0) {
-            signal = -40;
+        struct bme280_data data = get_sensor_data();
+        printf("Temperatura interna: %.2f\n", internalTemperature);
+        printf("Temperatura externa: %.2lf\n", data.temperature);
+        printf("Temperatura de referência: %.2f\n", referenceTemperature);
+        printf("Sinal de controle: %d\n\n", signal);
+
+        updateDisplay(internalTemperature, data.temperature);
+        logData(log, internalTemperature, data.temperature, signal);
+
+        status = readCommand();
+        if(status == 0x02 || status == 0x04) {
+            break;
         }
+        usleep(500000);
+    }
+    close(log);
+    return status;
+}
+
+int curveMode() {
+    int time = 0, target, log = getLogFile(), status;
+    FILE *file = fopen("Data/curva_reflow.csv", "r");
+    fscanf(file, "%*[^\n]");
+    fscanf(file, "%d,", &target);
+    while(1) {
+        if(time == target) {
+            fscanf(file, "%f", &referenceTemperature);
+            fscanf(file, "%d,", &target);
+        }
+
+        float internalTemperature;
+        if(readModbus(INT_TEMP, enrollment, &internalTemperature) == -1) {
+            showError();
+            break;
+        }
+
+        int signal = calculateSignal(internalTemperature);
+        writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
 
         struct bme280_data data = get_sensor_data();
         printf("Temperatura interna: %.2f\n", internalTemperature);
         printf("Temperatura externa: %.2lf\n", data.temperature);
         printf("Temperatura de referência: %.2f\n", referenceTemperature);
         printf("Sinal de controle: %d\n", signal);
-        printf("Time: %d\n\n", time);
-
-        writeModbus(CTRL_SIGNAL, enrollment, &signal);
-        if(mode != POTENTIOMETER_MODE) {
-            writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
-        }
-
-        if(signal >= 0) {
-            softPwmWrite(RESISTOR_PIN, signal);
-        } else {
-            signal = -signal;
-            softPwmWrite(FAN_PIN, signal);
-            softPwmWrite(RESISTOR_PIN, 0);
-        }
+        printf("Tempo: %d\n\n", time);
 
         updateDisplay(internalTemperature, data.temperature);
         logData(log, internalTemperature, data.temperature, signal);
 
-        int status = readCommand();
-        if(status == 0x02) {
+        status = readCommand();
+        if(status == 0x02 || status == 0x03) {
             break;
-        } else if(status == 0x03) {
-            time = 0;
-            if(file != NULL) {
-                fclose(file);
-                file = NULL;
-            }
         }
-        sleep(1);
+        
+        time++;
+        usleep(500000);
     }
-    if(file != NULL) {
-        fclose(file);
+    fclose(file);
+    close(log);
+    return status;
+}
+
+int terminalMode() {
+    int log = getLogFile(), status;
+    writeModbus(REF_SIGNAL, enrollment, &referenceTemperature);
+    while(1) {
+        float internalTemperature;
+        if(readModbus(INT_TEMP, enrollment, &internalTemperature) == -1) {
+            showError();
+            break;
+        }
+
+        int signal = calculateSignal(internalTemperature);
+
+        struct bme280_data data = get_sensor_data();
+        printf("Temperatura interna: %.2f\n", internalTemperature);
+        printf("Temperatura externa: %.2lf\n", data.temperature);
+        printf("Temperatura de referência: %.2f\n", referenceTemperature);
+        printf("Sinal de controle: %d\n\n", signal);
+
+        updateDisplay(internalTemperature, data.temperature);
+        logData(log, internalTemperature, data.temperature, signal);
+
+        status = readCommand();
+        if(status == 0x02 || status == 0x03 || status == 0x04) {
+            break;
+        }
+
+        usleep(500000);
     }
     close(log);
+    return status;
 }
 
 void showError() {
     printf("Desligando o forno (Erro na conexão Modbus)...\n\n");
     sleep(3);
+    softPwmWrite(RESISTOR_PIN, 0);
     unsigned char reply = 0;
     writeModbus(SYS_STATUS, enrollment, &reply);
 }
@@ -195,13 +243,29 @@ void initGpio() {
     pinMode(RESISTOR_PIN, OUTPUT);
     softPwmCreate(RESISTOR_PIN, 0, 100);
     pinMode(FAN_PIN, OUTPUT);
-    softPwmCreate(FAN_PIN, 40, 100);
+    softPwmCreate(FAN_PIN, 0, 100);
 }
 
 int calculateSignal(float internalTemperature) {
     pid_atualiza_referencia(referenceTemperature);
     pid_configura_constantes(kp, ki, kd);
-    return pid_controle(internalTemperature);
+    int signal = pid_controle(internalTemperature);
+
+    if(signal > -40 && signal < 0) {
+        signal = -40;
+    }
+
+    writeModbus(CTRL_SIGNAL, enrollment, &signal);
+
+    if(signal >= 0) {
+        softPwmWrite(RESISTOR_PIN, signal);
+        softPwmWrite(FAN_PIN, 0);
+    } else {
+        softPwmWrite(FAN_PIN, -signal);
+        softPwmWrite(RESISTOR_PIN, 0);
+    }
+
+    return signal;
 }
 
 int getLogFile() {
@@ -235,14 +299,13 @@ int readCommand() {
         return 0x02;
     }
     if(status == 0x02) {
+        softPwmWrite(RESISTOR_PIN, 0);
         unsigned char reply = 0;
         writeModbus(SYS_STATUS, enrollment, &reply);
     } else if(status == 0x03) {
         mode = POTENTIOMETER_MODE;
-        writeModbus(CTRL_MODE, enrollment, &mode);
     } else if(status == 0x04) {
         mode = CURVE_MODE;
-        writeModbus(CTRL_MODE, enrollment, &mode);
     }
     return status;
 }
@@ -319,6 +382,7 @@ void closeConnections() {
 
 void closeAll() {
     closeConnections();
+    softPwmWrite(RESISTOR_PIN, 0);
     unsigned char status = 0;
     writeModbus(SYS_STATUS, enrollment, &status);
     ClrLcd();
